@@ -1,24 +1,25 @@
 using Redis.OM;
+using ShoppingCartService;
 using ShoppingCartService.Models;
-using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var provider = new RedisConnectionProvider("redis://localhost:6379");
 var connection = provider.Connection;
 
-connection.CreateIndex(typeof(OrderList));
+var messagingQueue = new MessagingQueue(connection);
+messagingQueue.StartMessagingQueue();
 
-var orderList = new OrderList { UserId = 1, ItemId = 1, };
-
-var allOrders = provider.RedisCollection<OrderList>();
+//A bit bad code to just create an index just to be able to query the data
+await provider.Connection.CreateIndexAsync(typeof(Order));
 
 app.MapGet(
-    "/",
-    async (int userId) =>
+    "/{id}",
+    async (int id) =>
     {
         var results = new List<int>();
-        await foreach (var item in allOrders.Where(x => x.UserId == userId))
+        var allOrders = provider.RedisCollection<Order>();
+        await foreach (var item in allOrders.Where(x => x.UserId == id))
         {
             results.Add(item.ItemId);
         }
@@ -26,14 +27,4 @@ app.MapGet(
     }
 );
 
-//Actually I'm using a messaging queue for this!
-//app.MapPost(
-//    "/",
-//    async (OrderList order) =>
-//    {
-//        await connection.SetAsync(order);
-//        return Results.Ok();
-//    }
-//);
-
-//app.Run();
+app.Run();
